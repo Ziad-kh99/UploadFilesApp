@@ -1,11 +1,25 @@
 ﻿@page "/"
+@using UploadFilesApp.Models
 @inject IConfiguration config
 
 <PageTitle>Upload Files Demo</PageTitle>
 
 <h1>Upload Files Demo</h1>
-
-<InputFile OnChange="@UploadFiles" multiple accept=".png,.jpg,.jpeg" class="form-control" />
+<EditForm Model="newCustomer" OnValidSubmit="SubmitForm">
+    <div>
+        <label for="firstName">First Name:</label>
+        <InputText id="firstName" class="form-control" @bind-Value="newCustomer.FirstName" />    
+    </div>
+    <div>
+        <label for="lastName">Last Name:</label>
+        <InputText id="lastName" class="form-control" @bind-Value="newCustomer.LastName" />
+    </div>
+    <div>
+        <label for="profilePicture">Profile Picture:</label>
+        <InputFile OnChange="@UploadFiles" accept=".png,.jpg,.jpeg" class="form-control" />
+    </div>
+    <button class="btn btn-primary mt-3" type="submit">Create Customer</button>
+</EditForm>
 
 @if(errors.Count > 0)
 {
@@ -21,37 +35,61 @@
 @code {
 
     private long maxFileSize = 1024 * 1024 * 3;     // represent 3MB
-    private int maxAllowedFiles = 3;
+    // private int maxAllowedFiles = 1;
     private List<string> errors = new();
+    private CustomerModel newCustomer = new();
+    private IBrowserFile? file;
+
+
+    private async Task SubmitForm()
+    {
+        try 
+        {
+            string relativePath = await CaptureFile();
+
+            newCustomer.FileName = relativePath;
+        }
+        catch(Exception ex)
+        {
+            errors.Add($"Error: {ex.Message}");
+        }
+    }
+
     private async Task UploadFiles(InputFileChangeEventArgs e)
     {
-        errors.Clear();
+        file = e.File;
+    }
 
-        if(e.FileCount > maxAllowedFiles)
+    private async Task<string> CaptureFile()
+    {
+        if(file is null)
         {
-            errors.Add($"Error: Attempting to upload {e.FileCount} files, but only {maxAllowedFiles} files are allowed.");
-            return;
+            return "";
         }
-
-        foreach(var file in e.GetMultipleFiles(maxAllowedFiles))
+    
+        try 
         {
-            try {
-                string newFileName = Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(file.Name));
+            string newFileName = Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(file.Name));
 
-                string path = Path.Combine(config.GetValue<string>("FileStorage")!, "Images", newFileName);
+            string absolutePath = Path.Combine(config.GetValue<string>("FileStorage")!, "Images", newFileName);
             
-                Directory.CreateDirectory(Path.Combine(config.GetValue<string>("FileStorage")!, 
-                    "Images"));
+            string relativePath = Path.Combine("Resources", "Images", newFileName);
 
-                await using FileStream fs = new FileStream(path, FileMode.Create);
-                await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
-            }
-            catch(Exception ex)
-            {
-                errors.Add($"File: {file.Name}; Error: {ex.Message}");
-            }
-        
+            Directory.CreateDirectory(Path.Combine(config.GetValue<string>("FileStorage")!, 
+                "Images"));
+
+            await using FileStream fs = new FileStream(absolutePath, FileMode.Create);
+            await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
+
+
+            return relativePath;
         }
+        catch(Exception ex)
+        {
+            errors.Add($"File: {file.Name}; Error: {ex.Message}");
+            throw;
+        }
+        
     }
 }
 
